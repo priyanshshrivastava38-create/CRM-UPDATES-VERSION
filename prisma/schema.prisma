@@ -1,0 +1,913 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SALES
+  CEO
+  FINANCE
+  OPERATIONS
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  INTERESTED
+  FOLLOW_UP
+  NURTURE
+  CONVERTED
+  LOST
+  INVALID
+}
+
+enum Priority {
+  HOT
+  WARM
+  COLD
+}
+
+enum TaskType {
+  CALL
+  FOLLOW_UP
+  MEETING
+  EMAIL
+  WHATSAPP
+  OTHER
+}
+
+enum TaskStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum CallStatus {
+  CONNECTED
+  MISSED
+  NO_ANSWER
+}
+
+enum ConversationType {
+  CALL
+  MESSAGE
+  EMAIL
+}
+
+enum CampaignStatus {
+  PLANNED
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum ServiceType {
+  SMS
+  WHATSAPP
+}
+
+enum RateType {
+  FLAT
+  SLAB
+}
+
+enum OpportunityStatus {
+  NEW
+  QUALIFYING
+  PROPOSAL
+  WON
+  LOST
+}
+
+enum PriceApprovalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  RETURNED_FOR_REVISION
+}
+
+enum RatePlanStatus {
+  ACTIVE
+  SUPERSEDED
+}
+
+enum SetupChargeStatus {
+  PENDING
+  INVOICED
+  WAIVED
+}
+
+enum CustomerStatus {
+  ONBOARDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum OnboardingStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum OnboardingTeam {
+  SALES
+  FINANCE
+  OPERATIONS
+}
+
+enum OnboardingTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+  SKIPPED
+}
+
+enum PlatformAccountStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+enum ImportStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum BillingRunStatus {
+  DRAFT
+  CALCULATED
+  UNDER_REVIEW
+  FINALIZED
+  INVOICED
+}
+
+enum ReconciliationStatus {
+  PENDING
+  MATCHED
+  DISCREPANCY
+  RESOLVED
+}
+
+enum AdjustmentType {
+  CREDIT
+  DEBIT
+}
+
+enum AdjustmentScope {
+  USAGE
+  AMOUNT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  EXPORTED
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum InvoiceLineType {
+  USAGE
+  SETUP
+  ADJUSTMENT
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  password      String
+  role          Role
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  leads         Lead[]         @relation("LeadAssignee")
+  tasks         Task[]         @relation("TaskAssignee")
+  calls         Call[]
+  activities    Activity[]
+  notifications Notification[]
+
+  opportunitiesOwned       Opportunity[]          @relation("OpportunitySalesOwner")
+  opportunityDocuments     OpportunityDocument[]
+  customersManaged         Customer[]             @relation("CustomerAccountManager")
+  priceApprovalsRequested  PriceApprovalRequest[] @relation("PARRequestedBy")
+  priceApprovalsReviewed   PriceApprovalRequest[] @relation("PARReviewedBy")
+  onboardingTasksAssigned  OnboardingTask[]       @relation("OnboardingTaskAssignee")
+  onboardingTasksCompleted OnboardingTask[]       @relation("OnboardingTaskCompletedBy")
+  setupChargesWaived       SetupCharge[]          @relation("SetupChargeWaivedBy")
+  usageImportBatches       UsageImportBatch[]
+  billingRunsFinalized     BillingRun[]
+  reconciliationsReviewed  Reconciliation[]
+  adjustmentsRequested     Adjustment[]
+  paymentsRecorded         Payment[]
+
+  @@map("users")
+}
+
+model Lead {
+  id              String       @id @default(cuid())
+  firstName       String       @map("first_name")
+  lastName        String       @map("last_name")
+  email           String
+  phone           String
+  company         String
+  designation     String?
+  city            String?
+  source          String
+  status          LeadStatus   @default(NEW)
+  priority        Priority     @default(WARM)
+  score           Int          @default(45)
+  assignedTo      String?      @map("assigned_to")
+  organizationId  String?      @map("organization_id")
+  contactId       String?      @map("contact_id")
+  notes           String?
+  nextFollowUpAt  DateTime?    @map("next_follow_up_at")
+  lastContactedAt DateTime?    @map("last_contacted_at")
+  lostReason      String?      @map("lost_reason")
+  campaignId      String?      @map("campaign_id")
+  deletedAt       DateTime?    @map("deleted_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  assignedUser    User?        @relation("LeadAssignee", fields: [assignedTo], references: [id])
+  campaign        Campaign?    @relation(fields: [campaignId], references: [id])
+  organization    Organization? @relation("LeadOrganization", fields: [organizationId], references: [id], onDelete: SetNull)
+  contact         Contact?     @relation("LeadContact", fields: [contactId], references: [id], onDelete: SetNull)
+  tasks           Task[]
+  calls           Call[]
+  activities      Activity[]
+  opportunity     Opportunity?
+
+  @@index([status])
+  @@index([priority])
+  @@index([source])
+  @@index([assignedTo])
+  @@index([organizationId])
+  @@index([contactId])
+  @@index([email])
+  @@index([phone])
+  @@index([deletedAt])
+  @@map("leads")
+}
+
+model Organization {
+  id          String    @id @default(cuid())
+  name        String
+  industry    String?
+  website     String?
+  city        String?
+  country     String?
+  phone       String?
+  email       String?
+  tags        String[]  @default([])
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  contacts    Contact[]
+  leads       Lead[]    @relation("LeadOrganization")
+  activities  Activity[] @relation("OrganizationActivity")
+
+  @@index([name])
+  @@map("organizations")
+}
+
+model Contact {
+  id             String       @id @default(cuid())
+  firstName      String       @map("first_name")
+  lastName       String       @map("last_name")
+  email          String?
+  phone          String?
+  jobTitle       String?      @map("job_title")
+  department     String?
+  organizationId String?      @map("organization_id")
+  city           String?
+  country        String?
+  notes          String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  leads          Lead[]       @relation("LeadContact")
+  activities     Activity[]   @relation("ContactActivity")
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([phone])
+  @@map("contacts")
+}
+
+model Task {
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  type         TaskType
+  status       TaskStatus @default(OPEN)
+  priority     Priority   @default(WARM)
+  dueDate      DateTime   @map("due_date")
+  assignedTo   String?    @map("assigned_to")
+  leadId       String?    @map("lead_id")
+  deletedAt    DateTime?  @map("deleted_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  assignedUser User?      @relation("TaskAssignee", fields: [assignedTo], references: [id])
+  lead         Lead?      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([dueDate])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("tasks")
+}
+
+model Call {
+  id         String           @id @default(cuid())
+  leadId     String           @map("lead_id")
+  agentId    String           @map("agent_id")
+  type       ConversationType @default(CALL)
+  direction  CallDirection
+  status     CallStatus?
+  outcome    String?
+  duration   Int?
+  content    String?
+  notes      String?
+  transcript String?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  lead       Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  agent      User             @relation(fields: [agentId], references: [id])
+
+  @@index([createdAt])
+  @@map("calls")
+}
+
+model Campaign {
+  id        String         @id @default(cuid())
+  name      String
+  source    String
+  status    CampaignStatus @default(ACTIVE)
+  startDate DateTime       @map("start_date")
+  endDate   DateTime?      @map("end_date")
+  budget    Decimal        @db.Decimal(12, 2)
+  createdAt DateTime       @default(now()) @map("created_at")
+  leads     Lead[]
+
+  @@map("campaigns")
+}
+
+model Activity {
+  id            String       @id @default(cuid())
+  leadId        String?      @map("lead_id")
+  opportunityId String?      @map("opportunity_id")
+  customerId    String?      @map("customer_id")
+  contactId     String?      @map("contact_id")
+  organizationId String?     @map("organization_id")
+  userId        String?      @map("user_id")
+  activityType  String       @map("activity_type")
+  description   String
+  metadata      Json?
+  createdAt     DateTime     @default(now()) @map("created_at")
+  lead          Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  customer      Customer?    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contact       Contact?     @relation("ContactActivity", fields: [contactId], references: [id], onDelete: Cascade)
+  organization  Organization? @relation("OrganizationActivity", fields: [organizationId], references: [id], onDelete: Cascade)
+  user          User?        @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([contactId])
+  @@index([organizationId])
+  @@map("activities")
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  title      String
+  message    String
+  type       String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Sales & Opportunity Management
+// ---------------------------------------------------------------------------
+
+model Opportunity {
+  id                String            @id @default(cuid())
+  leadId            String?           @unique @map("lead_id")
+  name              String
+  companyName       String            @map("company_name")
+  contactName       String            @map("contact_name")
+  contactEmail      String            @map("contact_email")
+  contactPhone      String            @map("contact_phone")
+  billingAddress    String?           @map("billing_address")
+  gstNumber         String?           @map("gst_number")
+  expectedStartDate DateTime?         @map("expected_start_date")
+  opportunityValue  Decimal           @db.Decimal(14, 2) @map("opportunity_value")
+  status            OpportunityStatus @default(NEW)
+  lostReason        String?           @map("lost_reason")
+  salesOwnerId      String            @map("sales_owner_id")
+  deletedAt         DateTime?         @map("deleted_at")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  lead           Lead?                     @relation(fields: [leadId], references: [id])
+  salesOwner     User                      @relation("OpportunitySalesOwner", fields: [salesOwnerId], references: [id])
+  requirements   OpportunityRequirement[]
+  documents      OpportunityDocument[]
+  priceApprovals PriceApprovalRequest[]
+  activities     Activity[]
+  customer       Customer?
+
+  @@index([status])
+  @@index([salesOwnerId])
+  @@map("opportunities")
+}
+
+model OpportunityRequirement {
+  id                    String      @id @default(cuid())
+  opportunityId         String      @map("opportunity_id")
+  service               ServiceType
+  expectedMonthlyVolume Int         @map("expected_monthly_volume")
+  notes                 String?
+  createdAt             DateTime    @default(now()) @map("created_at")
+  opportunity           Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@unique([opportunityId, service])
+  @@map("opportunity_requirements")
+}
+
+model OpportunityDocument {
+  id            String      @id @default(cuid())
+  opportunityId String      @map("opportunity_id")
+  title         String
+  url           String
+  uploadedById  String      @map("uploaded_by_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  uploadedBy    User        @relation(fields: [uploadedById], references: [id])
+
+  @@map("opportunity_documents")
+}
+
+// ---------------------------------------------------------------------------
+// Price Request & Approval
+// ---------------------------------------------------------------------------
+
+model PriceApprovalRequest {
+  id                     String              @id @default(cuid())
+  requestNumber          String              @unique @map("request_number")
+  opportunityId          String?             @map("opportunity_id")
+  customerId             String?             @map("customer_id")
+  requestedById          String              @map("requested_by_id")
+  status                 PriceApprovalStatus @default(DRAFT)
+  proposedEffectiveDate  DateTime            @map("proposed_effective_date")
+  setupCost              Decimal?            @db.Decimal(14, 2) @map("setup_cost")
+  paymentTerms           String?             @map("payment_terms")
+  commercialTerms        String?             @map("commercial_terms")
+  expectedMonthlyRevenue Decimal?            @db.Decimal(14, 2) @map("expected_monthly_revenue")
+  expectedMarginPct      Decimal?            @db.Decimal(5, 2) @map("expected_margin_pct")
+  reason                 String?
+  reviewedById           String?             @map("reviewed_by_id")
+  reviewedAt             DateTime?           @map("reviewed_at")
+  reviewComments         String?             @map("review_comments")
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+
+  opportunity Opportunity?            @relation(fields: [opportunityId], references: [id])
+  customer    Customer?               @relation(fields: [customerId], references: [id])
+  requestedBy User                    @relation("PARRequestedBy", fields: [requestedById], references: [id])
+  reviewedBy  User?                   @relation("PARReviewedBy", fields: [reviewedById], references: [id])
+  lineItems   PriceApprovalLineItem[]
+  ratePlan    RatePlan?
+
+  @@index([status])
+  @@map("price_approval_requests")
+}
+
+model PriceApprovalLineItem {
+  id             String      @id @default(cuid())
+  requestId      String      @map("request_id")
+  service        ServiceType
+  component      String
+  rateType       RateType
+  flatRate       Decimal?    @db.Decimal(10, 4) @map("flat_rate")
+  expectedVolume Int?        @map("expected_volume")
+  billingMetric  String      @default("PER_UNIT") @map("billing_metric")
+  sortOrder      Int         @default(0) @map("sort_order")
+
+  request PriceApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  slabs   PriceApprovalSlab[]
+
+  @@map("price_approval_line_items")
+}
+
+model PriceApprovalSlab {
+  id         String  @id @default(cuid())
+  lineItemId String  @map("line_item_id")
+  minVolume  Int     @map("min_volume")
+  maxVolume  Int?    @map("max_volume")
+  rate       Decimal @db.Decimal(10, 4)
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  lineItem PriceApprovalLineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
+
+  @@map("price_approval_slabs")
+}
+
+// ---------------------------------------------------------------------------
+// Customer & versioned Rate Plan
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id               String         @id @default(cuid())
+  customerCode     String         @unique @map("customer_code")
+  opportunityId    String         @unique @map("opportunity_id")
+  name             String
+  billingAddress   String?        @map("billing_address")
+  gstNumber        String?        @map("gst_number")
+  contactName      String         @map("contact_name")
+  contactEmail     String         @map("contact_email")
+  contactPhone     String         @map("contact_phone")
+  accountManagerId String         @map("account_manager_id")
+  status           CustomerStatus @default(ONBOARDING)
+  activatedAt      DateTime?      @map("activated_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  opportunity      Opportunity            @relation(fields: [opportunityId], references: [id])
+  accountManager   User                   @relation("CustomerAccountManager", fields: [accountManagerId], references: [id])
+  priceApprovals   PriceApprovalRequest[]
+  ratePlans        RatePlan[]
+  onboarding       OnboardingChecklist?
+  platformAccounts PlatformAccount[]
+  setupCharges     SetupCharge[]
+  billingRuns      BillingRun[]
+  invoices         Invoice[]
+  activities       Activity[]
+
+  @@index([status])
+  @@map("customers")
+}
+
+model RatePlan {
+  id              String         @id @default(cuid())
+  customerId      String         @map("customer_id")
+  sourceRequestId String         @unique @map("source_request_id")
+  effectiveFrom   DateTime       @map("effective_from")
+  effectiveTo     DateTime?      @map("effective_to")
+  status          RatePlanStatus @default(ACTIVE)
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  customer      Customer             @relation(fields: [customerId], references: [id])
+  sourceRequest PriceApprovalRequest @relation(fields: [sourceRequestId], references: [id])
+  lineItems     RatePlanLineItem[]
+  setupCharges  SetupCharge[]
+  billingRuns   BillingRun[]
+
+  @@index([customerId, effectiveFrom])
+  @@map("rate_plans")
+}
+
+model RatePlanLineItem {
+  id            String      @id @default(cuid())
+  ratePlanId    String      @map("rate_plan_id")
+  service       ServiceType
+  component     String
+  rateType      RateType
+  flatRate      Decimal?    @db.Decimal(10, 4) @map("flat_rate")
+  billingMetric String      @default("PER_UNIT") @map("billing_metric")
+  sortOrder     Int         @default(0) @map("sort_order")
+
+  ratePlan RatePlan   @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  slabs    RateSlab[]
+
+  @@unique([ratePlanId, service, component])
+  @@map("rate_plan_line_items")
+}
+
+model RateSlab {
+  id         String  @id @default(cuid())
+  lineItemId String  @map("line_item_id")
+  minVolume  Int     @map("min_volume")
+  maxVolume  Int?    @map("max_volume")
+  rate       Decimal @db.Decimal(10, 4)
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  lineItem RatePlanLineItem @relation(fields: [lineItemId], references: [id], onDelete: Cascade)
+
+  @@map("rate_slabs")
+}
+
+model SetupCharge {
+  id           String            @id @default(cuid())
+  customerId   String            @map("customer_id")
+  ratePlanId   String            @map("rate_plan_id")
+  amount       Decimal           @db.Decimal(14, 2)
+  status       SetupChargeStatus @default(PENDING)
+  chargeDate   DateTime?         @map("charge_date")
+  waivedById   String?           @map("waived_by_id")
+  waivedReason String?           @map("waived_reason")
+  waivedAt     DateTime?         @map("waived_at")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id])
+  waivedBy User?    @relation("SetupChargeWaivedBy", fields: [waivedById], references: [id])
+
+  @@map("setup_charges")
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding
+// ---------------------------------------------------------------------------
+
+model OnboardingChecklist {
+  id          String           @id @default(cuid())
+  customerId  String           @unique @map("customer_id")
+  status      OnboardingStatus @default(PENDING)
+  startedAt   DateTime?        @map("started_at")
+  completedAt DateTime?        @map("completed_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  customer Customer         @relation(fields: [customerId], references: [id])
+  tasks    OnboardingTask[]
+
+  @@map("onboarding_checklists")
+}
+
+model OnboardingTask {
+  id            String               @id @default(cuid())
+  checklistId   String               @map("checklist_id")
+  team          OnboardingTeam
+  title         String
+  description   String?
+  status        OnboardingTaskStatus @default(PENDING)
+  isRequired    Boolean              @default(true) @map("is_required")
+  assignedToId  String?              @map("assigned_to_id")
+  dueDate       DateTime?            @map("due_date")
+  completedAt   DateTime?            @map("completed_at")
+  completedById String?              @map("completed_by_id")
+  sortOrder     Int                  @default(0) @map("sort_order")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  checklist   OnboardingChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  assignedTo  User?               @relation("OnboardingTaskAssignee", fields: [assignedToId], references: [id])
+  completedBy User?               @relation("OnboardingTaskCompletedBy", fields: [completedById], references: [id])
+
+  @@index([status])
+  @@index([team])
+  @@map("onboarding_tasks")
+}
+
+// ---------------------------------------------------------------------------
+// Third-party platform mapping & usage
+// ---------------------------------------------------------------------------
+
+model PlatformAccount {
+  id                String                @id @default(cuid())
+  customerId        String                @map("customer_id")
+  service           ServiceType
+  externalAccountId String                @map("external_account_id")
+  providerName      String                @map("provider_name")
+  adapterKey        String                @default("MOCK") @map("adapter_key")
+  status            PlatformAccountStatus @default(PENDING)
+  metadata          Json?
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  usageRecords UsageRecord[]
+
+  @@unique([service, externalAccountId])
+  @@index([customerId])
+  @@map("platform_accounts")
+}
+
+model UsageImportBatch {
+  id           String       @id @default(cuid())
+  uploadedById String       @map("uploaded_by_id")
+  fileName     String?      @map("file_name")
+  service      ServiceType
+  status       ImportStatus @default(PROCESSING)
+  rowCount     Int          @default(0) @map("row_count")
+  successCount Int          @default(0) @map("success_count")
+  errorCount   Int          @default(0) @map("error_count")
+  errorLog     Json?        @map("error_log")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  uploadedBy User          @relation(fields: [uploadedById], references: [id])
+  records    UsageRecord[]
+
+  @@map("usage_import_batches")
+}
+
+model UsageRecord {
+  id                String      @id @default(cuid())
+  importBatchId     String?     @map("import_batch_id")
+  platformAccountId String      @map("platform_account_id")
+  service           ServiceType
+  component         String
+  usageDate         DateTime    @map("usage_date")
+  quantity          Int
+  sourceReference   String?     @map("source_reference")
+  rawPayload        Json?       @map("raw_payload")
+  createdAt         DateTime    @default(now()) @map("created_at")
+
+  importBatch     UsageImportBatch? @relation(fields: [importBatchId], references: [id])
+  platformAccount PlatformAccount   @relation(fields: [platformAccountId], references: [id])
+
+  @@index([platformAccountId, usageDate])
+  @@index([service, component])
+  @@map("usage_records")
+}
+
+// ---------------------------------------------------------------------------
+// Billing, reconciliation, invoicing
+// ---------------------------------------------------------------------------
+
+model BillingRun {
+  id                    String           @id @default(cuid())
+  customerId            String           @map("customer_id")
+  ratePlanId            String           @map("rate_plan_id")
+  periodStart           DateTime         @map("period_start")
+  periodEnd             DateTime         @map("period_end")
+  status                BillingRunStatus @default(DRAFT)
+  totalUsageAmount      Decimal          @default(0) @db.Decimal(14, 2) @map("total_usage_amount")
+  totalSetupAmount      Decimal          @default(0) @db.Decimal(14, 2) @map("total_setup_amount")
+  totalAdjustmentAmount Decimal          @default(0) @db.Decimal(14, 2) @map("total_adjustment_amount")
+  totalAmount           Decimal          @default(0) @db.Decimal(14, 2) @map("total_amount")
+  calculatedAt          DateTime?        @map("calculated_at")
+  finalizedAt           DateTime?        @map("finalized_at")
+  finalizedById         String?          @map("finalized_by_id")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
+
+  customer       Customer          @relation(fields: [customerId], references: [id])
+  ratePlan       RatePlan          @relation(fields: [ratePlanId], references: [id])
+  finalizedBy    User?             @relation(fields: [finalizedById], references: [id])
+  billableUsages BillableUsage[]
+  lineItems      BillingLineItem[]
+  adjustments    Adjustment[]
+  reconciliation Reconciliation?
+  invoice        Invoice?
+
+  @@unique([customerId, periodStart, periodEnd])
+  @@index([status])
+  @@map("billing_runs")
+}
+
+model BillableUsage {
+  id               String      @id @default(cuid())
+  billingRunId     String      @map("billing_run_id")
+  service          ServiceType
+  component        String
+  rawQuantity      Int         @map("raw_quantity")
+  billableQuantity Int         @map("billable_quantity")
+  createdAt        DateTime    @default(now()) @map("created_at")
+
+  billingRun BillingRun @relation(fields: [billingRunId], references: [id], onDelete: Cascade)
+
+  @@unique([billingRunId, service, component])
+  @@map("billable_usages")
+}
+
+model BillingLineItem {
+  id               String      @id @default(cuid())
+  billingRunId     String      @map("billing_run_id")
+  service          ServiceType
+  component        String
+  billableQuantity Int         @map("billable_quantity")
+  rateType         RateType    @map("rate_type")
+  appliedRate      Decimal     @db.Decimal(10, 4) @map("applied_rate")
+  slabLabel        String?     @map("slab_label")
+  amount           Decimal     @db.Decimal(14, 2)
+  sortOrder        Int         @default(0) @map("sort_order")
+
+  billingRun BillingRun @relation(fields: [billingRunId], references: [id], onDelete: Cascade)
+
+  @@map("billing_line_items")
+}
+
+model Reconciliation {
+  id                    String               @id @default(cuid())
+  billingRunId          String               @unique @map("billing_run_id")
+  status                ReconciliationStatus @default(PENDING)
+  totalRawQuantity      Int                  @map("total_raw_quantity")
+  totalBillableQuantity Int                  @map("total_billable_quantity")
+  varianceQuantity      Int                  @map("variance_quantity")
+  varianceAmount        Decimal              @db.Decimal(14, 2) @map("variance_amount")
+  reviewedById          String?              @map("reviewed_by_id")
+  reviewedAt            DateTime?            @map("reviewed_at")
+  notes                 String?
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  billingRun  BillingRun   @relation(fields: [billingRunId], references: [id])
+  reviewedBy  User?        @relation(fields: [reviewedById], references: [id])
+  adjustments Adjustment[]
+
+  @@map("reconciliations")
+}
+
+model Adjustment {
+  id               String          @id @default(cuid())
+  billingRunId     String          @map("billing_run_id")
+  reconciliationId String?         @map("reconciliation_id")
+  type             AdjustmentType
+  scope            AdjustmentScope
+  relatedComponent String?         @map("related_component")
+  oldValue         Decimal?        @db.Decimal(14, 2) @map("old_value")
+  newValue         Decimal?        @db.Decimal(14, 2) @map("new_value")
+  amount           Decimal         @db.Decimal(14, 2)
+  reason           String
+  requestedById    String          @map("requested_by_id")
+  createdAt        DateTime        @default(now()) @map("created_at")
+
+  billingRun     BillingRun      @relation(fields: [billingRunId], references: [id])
+  reconciliation Reconciliation? @relation(fields: [reconciliationId], references: [id])
+  requestedBy    User            @relation(fields: [requestedById], references: [id])
+
+  @@map("adjustments")
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  invoiceNumber    String        @unique @map("invoice_number")
+  billingRunId     String        @unique @map("billing_run_id")
+  customerId       String        @map("customer_id")
+  periodStart      DateTime      @map("period_start")
+  periodEnd        DateTime      @map("period_end")
+  issueDate        DateTime      @map("issue_date")
+  dueDate          DateTime      @map("due_date")
+  subtotal         Decimal       @db.Decimal(14, 2)
+  setupCharges     Decimal       @default(0) @db.Decimal(14, 2) @map("setup_charges")
+  adjustmentsTotal Decimal       @default(0) @db.Decimal(14, 2) @map("adjustments_total")
+  totalAmount      Decimal       @db.Decimal(14, 2) @map("total_amount")
+  status           InvoiceStatus @default(DRAFT)
+  exportedAt       DateTime?     @map("exported_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  billingRun BillingRun        @relation(fields: [billingRunId], references: [id])
+  customer   Customer          @relation(fields: [customerId], references: [id])
+  lineItems  InvoiceLineItem[]
+  payments   Payment[]
+
+  @@map("invoices")
+}
+
+model InvoiceLineItem {
+  id          String          @id @default(cuid())
+  invoiceId   String          @map("invoice_id")
+  lineType    InvoiceLineType @map("line_type")
+  service     ServiceType?
+  component   String?
+  description String
+  quantity    Int?
+  rate        Decimal?        @db.Decimal(10, 4)
+  amount      Decimal         @db.Decimal(14, 2)
+  sortOrder   Int             @default(0) @map("sort_order")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_line_items")
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  invoiceId    String   @map("invoice_id")
+  amount       Decimal  @db.Decimal(14, 2)
+  paidOn       DateTime @map("paid_on")
+  method       String?
+  reference    String?
+  recordedById String   @map("recorded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  invoice    Invoice @relation(fields: [invoiceId], references: [id])
+  recordedBy User    @relation(fields: [recordedById], references: [id])
+
+  @@map("payments")
+}

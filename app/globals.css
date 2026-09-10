@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --app-bg: #eef2f9;
+  --app-bg-glow: radial-gradient(1200px 600px at 12% -10%, rgba(54, 103, 240, 0.07), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(124, 58, 237, 0.05), transparent 55%);
+  --surface: #ffffff;
+  --panel: #f6f8fc;
+  --ink: #151b2c;
+  --line: #e1e7f0;
+  --scrollbar-thumb: #c5cfdd;
+  --chart-grid: #e7ecf4;
+  --chart-text: #64748b;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --app-bg: #090d17;
+  --app-bg-glow: radial-gradient(1200px 600px at 12% -10%, rgba(54, 103, 240, 0.16), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(124, 58, 237, 0.1), transparent 55%);
+  --surface: #111827;
+  --panel: #161f33;
+  --ink: #eef1f8;
+  --line: #262f45;
+  --scrollbar-thumb: #364058;
+  --chart-grid: #262f45;
+  --chart-text: #8b98b8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(54, 103, 240, 0.25);
+}
+
+:focus-visible {
+  outline: 2px solid rgba(54, 103, 240, 0.55);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.bg-app-glow {
+  background: var(--app-bg-glow), var(--app-bg);
+  background-attachment: fixed;
+}
+
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--scrollbar-thumb) 80%, var(--ink));
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -400px 0;
+  }
+  to {
+    background-position: 400px 0;
+  }
+}
