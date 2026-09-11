@@ -4,15 +4,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { titleCase } from "@/lib/format";
 
 export const fieldClass =
-  "mt-2 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink outline-none transition-shadow duration-150 placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
+  "mt-2 w-full rounded-xl border border-line bg-[#f8fafd] px-3 text-sm text-ink outline-none transition-shadow duration-150 placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 dark:bg-[#101b2d]";
 
 export const primaryBtnClass =
-  "rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-60 disabled:hover:brightness-100";
+  "rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-60 disabled:hover:brightness-100";
 
-export const secondaryBtnClass = "rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-panel";
+export const secondaryBtnClass = "rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-panel";
 
 export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-line/70 bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover ${className}`}>{children}</section>;
+  return <section className={`rounded-2xl border border-line bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover ${className}`}>{children}</section>;
 }
 
 export function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: string }) {
@@ -23,14 +23,14 @@ export function Badge({ children, tone = "slate" }: { children: React.ReactNode;
     blue: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-800",
     slate: "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
   };
-  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${tones[tone]}`}>{children}</span>;
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${tones[tone]}`}>{children}</span>;
 }
 
 export function Title({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1>
+        <h1 className="text-[28px] font-semibold tracking-[-0.04em] text-ink">{title}</h1>
         {subtitle ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
       </div>
       {action}

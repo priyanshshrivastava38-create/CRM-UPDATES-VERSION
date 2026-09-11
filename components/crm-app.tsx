@@ -200,6 +200,7 @@ export function CRMApp() {
   const [taskForm, setTaskForm] = useState({ title: "", description: "", type: "FOLLOW_UP", priority: "WARM", dueDate: "", assignedTo: "", leadId: "" });
   const [callForm, setCallForm] = useState({ type: "CALL", direction: "OUTBOUND", status: "CONNECTED", outcome: "Interested", duration: 6, content: "", notes: "", transcript: "" });
   const [busy, setBusy] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const agents = users.filter((item) => item.role === "SALES");
 
   const applyView = useCallback((view: SavedLeadView) => {
@@ -225,34 +226,35 @@ export function CRMApp() {
   }, [filters, savedViews.length]);
 
   const loadAll = useCallback(async () => {
-    const [boot, leadRes, taskRes, callRes, dashRes, campaignRes] = await Promise.all([
-      fetch("/api/bootstrap"),
-      fetch(`/api/leads?${new URLSearchParams({ ...filters, page: String(leadsPage), pageSize: String(leadsPagination.pageSize) })}`),
-      fetch("/api/tasks"),
-      fetch("/api/calls"),
-      fetch("/api/dashboard"),
-      fetch("/api/campaigns")
-    ]);
-    if (boot.status === 401) {
-      location.href = "/login";
-      return;
+    setIsLoadingData(true);
+    try {
+      const [boot, leadRes, taskRes, callRes, dashRes, campaignRes] = await Promise.all([
+        fetch("/api/bootstrap"),
+        fetch(`/api/leads?${new URLSearchParams({ ...filters, page: String(leadsPage), pageSize: String(leadsPagination.pageSize) })}`),
+        fetch("/api/tasks"),
+        fetch("/api/calls"),
+        fetch("/api/dashboard"),
+        fetch("/api/campaigns")
+      ]);
+      if (boot.status === 401) {
+        location.href = "/login";
+        return;
+      }
+      const bootJson = await boot.json();
+      setUser(bootJson.user);
+      setUsers(bootJson.users);
+      setNotifications(bootJson.notifications);
+      setCampaigns((await campaignRes.json()).campaigns);
+      const leadJson = await leadRes.json();
+      setLeads(leadJson.leads);
+      if (leadJson.pagination) setLeadsPagination(leadJson.pagination);
+      setTasks((await taskRes.json()).tasks);
+      setCalls((await callRes.json()).calls);
+      setDashboard(await dashRes.json());
+    } finally {
+      setIsLoadingData(false);
     }
-    const bootJson = await boot.json();
-    setUser(bootJson.user);
-    setUsers(bootJson.users);
-    setNotifications(bootJson.notifications);
-    setCampaigns((await campaignRes.json()).campaigns);
-    const leadJson = await leadRes.json();
-    setLeads(leadJson.leads);
-    if (leadJson.pagination) setLeadsPagination(leadJson.pagination);
-    setTasks((await taskRes.json()).tasks);
-    setCalls((await callRes.json()).calls);
-    setDashboard(await dashRes.json());
   }, [filters, leadsPage, leadsPagination.pageSize]);
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
 
   useEffect(() => {
     const timer = setTimeout(() => setFilters((prev) => ({ ...prev, q: globalSearch })), 250);
@@ -260,8 +262,8 @@ export function CRMApp() {
   }, [globalSearch]);
 
   useEffect(() => {
-    loadAll();
-  }, [filters.q, loadAll]);
+    void loadAll();
+  }, [filters, leadsPage, leadsPagination.pageSize, loadAll]);
 
   useEffect(() => {
     setLeadsPage(1);
@@ -358,7 +360,7 @@ export function CRMApp() {
   }, []);
 
   const content = useMemo(() => {
-    if (active === "Dashboard") return <Dashboard dashboard={dashboard} leads={leads} openLead={openLead} setActive={setActive} user={user} />;
+    if (active === "Dashboard") return <Dashboard dashboard={dashboard} leads={leads} openLead={openLead} setActive={setActive} user={user} loading={isLoadingData} />;
     if (active === "Leads")
       return (
         <LeadsView
@@ -400,18 +402,22 @@ export function CRMApp() {
             <div className="min-w-0 flex-1">
               <div className="relative max-w-xl">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={17} />
-                <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Search leads by name, phone, email or company" className="h-10 w-full rounded-xl border border-line bg-panel pl-10 pr-3 text-sm outline-none transition-shadow duration-150 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15" />
+                <input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="Search leads, contacts, companies..." className="h-10 w-full rounded-xl border border-line bg-[#f5f8ff] pl-10 pr-3 text-sm text-slate-700 outline-none transition-shadow duration-150 placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 dark:bg-[#101b2d] dark:text-slate-200" />
               </div>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-2 py-1.5">
+              <button onClick={() => setActive("Dashboard")} className="rounded-lg bg-brand-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-700 transition-colors hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300">Overview</button>
+              <button onClick={() => setActive("Leads")} className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:bg-panel dark:text-slate-300">Leads</button>
             </div>
             <div className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-slate-500 transition-colors hover:bg-panel dark:text-slate-400">
               <Bell size={17} />
               {notifications?.length ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-500 ring-2 ring-surface" /> : null}
             </div>
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-sm font-semibold text-white">{(user?.name ?? "?").charAt(0)}</div>
+            <div className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-2 py-1.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-semibold text-white shadow-glow">{(user?.name ?? "?").charAt(0)}</div>
               <div className="hidden text-right sm:block">
                 <div className="text-sm font-semibold leading-tight text-ink">{user?.name ?? "Loading"}</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{user?.role ? titleCase(user.role) : ""}</div>
+                <div className="text-[11px] uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{user?.role ? titleCase(user.role) : ""}</div>
               </div>
             </div>
             <button onClick={() => setActive("Settings")} className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-colors ${active === "Settings" ? "border-brand-300 bg-brand-50 text-brand-600 dark:border-brand-700 dark:bg-brand-500/10 dark:text-brand-400" : "border-line bg-surface text-slate-600 hover:bg-panel dark:text-slate-300"}`}><Settings size={17} /></button>
@@ -487,10 +493,11 @@ function activityConversationTone(activity: Activity): "green" | "red" | null {
 }
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-line/70 bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover ${className}`}>{children}</section>;
+  return <section className={`rounded-2xl border border-line bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover ${className}`}>{children}</section>;
 }
 
-function Dashboard({ dashboard, leads, openLead, setActive, user }: any) {
+function Dashboard({ dashboard, leads, openLead, setActive, user, loading }: any) {
+  if (loading && !dashboard) return <LoadingGrid />;
   const slaSummary = useMemo(() => {
     const summary = { ok: 0, warning: 0, escalated: 0 };
     for (const lead of leads) {
@@ -507,6 +514,7 @@ function Dashboard({ dashboard, leads, openLead, setActive, user }: any) {
   }, [leads]);
   const workflowActions = useMemo(() => leads.flatMap((lead) => evaluateWorkflowActions(lead)).slice(0, 4), [leads]);
   if (!dashboard) return <LoadingGrid />;
+
   const kpis = [
     ["Total Leads", dashboard.kpis.total, Users, "brand"],
     ["New Leads", dashboard.kpis.newLeads, Plus, "violet"],
@@ -517,27 +525,51 @@ function Dashboard({ dashboard, leads, openLead, setActive, user }: any) {
     ["Converted", dashboard.kpis.converted, CircleDollarSign, "green"],
     ["Conversion Rate", `${dashboard.kpis.conversionRate}%`, BarChart3, "brand"]
   ];
+
   return (
     <div className="space-y-5">
-      <Title title="Dashboard" subtitle="Pipeline health, action center, and today&apos;s follow-ups." />
+      <div className="overflow-hidden rounded-3xl border border-line bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 p-5 text-white shadow-soft">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-100/90">Sales cockpit</div>
+            <div className="mt-2 text-3xl font-semibold tracking-[-0.05em]">Executive CRM overview</div>
+            <p className="mt-2 max-w-2xl text-sm text-brand-50/90">Monitor pipeline health, team productivity, and deal acceleration across the full revenue cycle.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setActive("Leads")} className="rounded-xl bg-white/12 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-white/18">Open pipeline</button>
+            <button onClick={() => setActive("Tasks")} className="rounded-xl border border-white/25 bg-white/8 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white transition-colors hover:bg-white/14">View tasks</button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map(([label, value, Icon, tone]: any) => (
           <Card key={label} className="group">
             <div className="flex items-center justify-between">
-              <div><p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p><p className="mt-2 text-2xl font-semibold tracking-tight text-ink">{value}</p></div>
+              <div>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
+                <p className="mt-2 text-2xl font-semibold tracking-tight text-ink">{value}</p>
+              </div>
               <div className={`flex h-11 w-11 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${kpiChipTones[tone]}`}><Icon size={19} /></div>
             </div>
           </Card>
         ))}
       </div>
+
       <div className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
         <ChartCard title="Leads by Status"><BarGraph data={dashboard.byStatus} /></ChartCard>
         <Card>
-          <h3 className="font-semibold text-ink">AI Action Center</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-ink">AI Action Center</h3>
+            <Badge tone="blue">Priority</Badge>
+          </div>
           <div className="mt-3 space-y-2.5">
             {dashboard.actions.map((action: any) => (
               <button key={action.type + action.message} onClick={() => action.leadId && openLead(action.leadId)} className="flex w-full items-center justify-between rounded-xl border border-line p-3 text-left transition-all duration-150 hover:border-brand-300 hover:bg-panel">
-                <div><div className="text-sm font-semibold">{action.type}</div><div className="text-sm text-slate-500 dark:text-slate-400">{action.message}</div></div>
+                <div>
+                  <div className="text-sm font-semibold">{action.type}</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">{action.message}</div>
+                </div>
                 <ChevronRight size={16} className="text-slate-400 transition-transform group-hover:translate-x-0.5" />
               </button>
             ))}
@@ -545,17 +577,25 @@ function Dashboard({ dashboard, leads, openLead, setActive, user }: any) {
           <button onClick={() => setActive("Tasks")} className="mt-4 text-sm font-semibold text-brand-700 transition-colors hover:text-brand-600 dark:text-brand-400">View all tasks →</button>
         </Card>
       </div>
-      <div className="grid gap-4 xl:grid-cols-2">
+
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card>
-          <h3 className="font-semibold text-ink">SLA overview</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-ink">SLA overview</h3>
+            <Badge tone="slate">Health</Badge>
+          </div>
           <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
             <div className="rounded-xl border border-line bg-panel p-3"><div className="text-xs uppercase tracking-wide text-slate-500">OK</div><div className="mt-2 text-2xl font-semibold text-ink">{slaSummary.ok}</div></div>
             <div className="rounded-xl border border-line bg-panel p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Warning</div><div className="mt-2 text-2xl font-semibold text-amber-600">{slaSummary.warning}</div></div>
             <div className="rounded-xl border border-line bg-panel p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Escalated</div><div className="mt-2 text-2xl font-semibold text-red-600">{slaSummary.escalated}</div></div>
           </div>
         </Card>
+
         <Card>
-          <h3 className="font-semibold text-ink">Automation queue</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-ink">Automation queue</h3>
+            <Badge tone="green">Live</Badge>
+          </div>
           <div className="mt-3 space-y-2">
             {workflowActions.map((action) => (
               <div key={`${action.leadId ?? "lead"}-${action.id}`} className="rounded-xl border border-line bg-panel p-3">
@@ -566,18 +606,21 @@ function Dashboard({ dashboard, leads, openLead, setActive, user }: any) {
             ))}
           </div>
         </Card>
-      </div>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <ChartCard title="Leads by Source"><PieGraph data={dashboard.bySource} /></ChartCard>
-        <ChartCard title="Conversion Funnel"><FunnelGraph data={dashboard.funnel} /></ChartCard>
+
         <Card>
-          <h3 className="font-semibold text-ink">Today&apos;s Follow-ups</h3>
+          <h3 className="font-semibold text-ink">Today&apos;s follow-ups</h3>
           <div className="mt-3 space-y-2">
             {dashboard.todayTasks.map((task: Task) => <TaskRow key={task.id} task={task} />)}
           </div>
         </Card>
       </div>
-      <ChartCard title="Agent Performance"><AgentGraph data={dashboard.agentPerformance} /></ChartCard>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ChartCard title="Leads by Source"><PieGraph data={dashboard.bySource} /></ChartCard>
+        <ChartCard title="Conversion Funnel"><FunnelGraph data={dashboard.funnel} /></ChartCard>
+        <ChartCard title="Agent Performance"><AgentGraph data={dashboard.agentPerformance} /></ChartCard>
+      </div>
+
       {user?.role === "SALES" || user?.role === "ADMIN" ? (
         <div>
           <h2 className="mb-3 font-semibold text-ink">My Customers & Billing</h2>
@@ -983,15 +1026,15 @@ function CreateCampaignModal({ form, setForm, onClose, onSubmit, busy }: any) {
 }
 
 function Title({ title, subtitle, action }: any) {
-  return <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p></div>{action}</div>;
+  return <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-[28px] font-semibold tracking-[-0.04em] text-ink">{title}</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p></div>{action}</div>;
 }
 
 const fieldClass =
-  "mt-2 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink outline-none transition-shadow duration-150 placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
+  "mt-2 w-full rounded-xl border border-line bg-[#f8fafd] px-3 text-sm text-ink outline-none transition-shadow duration-150 placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/12 dark:bg-[#101b2d]";
 
 const primaryBtnClass =
-  "rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-60 disabled:hover:brightness-100";
-const secondaryBtnClass = "rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-panel";
+  "rounded-xl bg-gradient-to-r from-brand-600 to-brand-500 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-60 disabled:hover:brightness-100";
+const secondaryBtnClass = "rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-panel";
 
 function Input({ label, value, onChange, type = "text", required = false }: any) {
   return <label className="block"><span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span><input required={required} type={type} value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`h-10 ${fieldClass}`} /></label>;

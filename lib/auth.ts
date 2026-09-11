@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { DEMO_ACCOUNTS } from "@/lib/demo-accounts";
 export { DEMO_PASSWORD } from "@/lib/demo-accounts";
 
 export const SESSION_COOKIE = "vih_session";
@@ -66,6 +67,30 @@ export async function requireUser() {
 
 export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
+}
+
+export async function ensureDemoAccounts() {
+  await Promise.all(
+    DEMO_ACCOUNTS.map(async (account) => {
+      const passwordHash = await hashPassword(account.password);
+      await prisma.user.upsert({
+        where: { email: account.email },
+        update: {
+          name: account.name,
+          password: passwordHash,
+          role: account.role,
+          active: true
+        },
+        create: {
+          name: account.name,
+          email: account.email,
+          password: passwordHash,
+          role: account.role,
+          active: true
+        }
+      });
+    })
+  );
 }
 
 // Constant-cost placeholder hash so login always pays the bcrypt.compare cost,

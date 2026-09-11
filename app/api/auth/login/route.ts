@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { createSessionToken, verifyPassword, SESSION_COOKIE, SESSION_TTL_SECONDS, DUMMY_PASSWORD_HASH } from "@/lib/auth";
+import { createSessionToken, verifyPassword, SESSION_COOKIE, SESSION_TTL_SECONDS, DUMMY_PASSWORD_HASH, ensureDemoAccounts } from "@/lib/auth";
 
 export async function POST(request: Request) {
   let body: { email?: string; password?: string };
@@ -14,7 +14,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email: body.email } });
+  let user = await prisma.user.findUnique({ where: { email: body.email } });
+
+  if (!user) {
+    await ensureDemoAccounts();
+    user = await prisma.user.findUnique({ where: { email: body.email } });
+  }
+
   const passwordValid = await verifyPassword(body.password, user?.password ?? DUMMY_PASSWORD_HASH);
   if (!user || !user.active || !passwordValid) {
     return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });

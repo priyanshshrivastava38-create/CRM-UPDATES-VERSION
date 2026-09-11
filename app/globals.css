@@ -4,30 +4,30 @@
 
 :root {
   color-scheme: light;
-  --app-bg: #eef2f9;
-  --app-bg-glow: radial-gradient(1200px 600px at 12% -10%, rgba(54, 103, 240, 0.07), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(124, 58, 237, 0.05), transparent 55%);
+  --app-bg: #f3f6fb;
+  --app-bg-glow: radial-gradient(1200px 600px at 12% -10%, rgba(53, 99, 217, 0.08), transparent 58%),
+    radial-gradient(900px 500px at 100% 0%, rgba(18, 31, 58, 0.04), transparent 55%);
   --surface: #ffffff;
   --panel: #f6f8fc;
-  --ink: #151b2c;
-  --line: #e1e7f0;
-  --scrollbar-thumb: #c5cfdd;
+  --ink: #111827;
+  --line: #e5eaf3;
+  --scrollbar-thumb: #b8c4d8;
   --chart-grid: #e7ecf4;
   --chart-text: #64748b;
 }
 
 :root.dark {
   color-scheme: dark;
-  --app-bg: #090d17;
-  --app-bg-glow: radial-gradient(1200px 600px at 12% -10%, rgba(54, 103, 240, 0.16), transparent 60%),
-    radial-gradient(900px 500px at 100% 0%, rgba(124, 58, 237, 0.1), transparent 55%);
-  --surface: #111827;
-  --panel: #161f33;
-  --ink: #eef1f8;
-  --line: #262f45;
-  --scrollbar-thumb: #364058;
-  --chart-grid: #262f45;
-  --chart-text: #8b98b8;
+  --app-bg: #0b1220;
+  --app-bg-glow: radial-gradient(1200px 600px at 12% -10%, rgba(91, 135, 246, 0.12), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(17, 24, 39, 0.16), transparent 55%);
+  --surface: #111a2b;
+  --panel: #162133;
+  --ink: #edf4ff;
+  --line: #243149;
+  --scrollbar-thumb: #40506d;
+  --chart-grid: #243149;
+  --chart-text: #9aa9c3;
 }
 
 * {

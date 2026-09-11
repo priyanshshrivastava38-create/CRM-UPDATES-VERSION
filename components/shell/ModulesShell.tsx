@@ -22,7 +22,9 @@ export function ModulesShell({ role, children }: { role: string; children: React
   return (
     <div className="flex min-h-screen bg-app-glow">
       <Sidebar items={items} subtitle="Operations Console" />
-      <main className="min-w-0 flex-1 p-4 lg:p-6">{children}</main>
+      <main className="min-w-0 flex-1 px-4 py-5 lg:px-6 lg:py-6">
+        <div className="mx-auto max-w-[1500px]">{children}</div>
+      </main>
     </div>
   );
 }
