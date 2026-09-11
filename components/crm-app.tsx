@@ -2,7 +2,9 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getLeadSlaState } from "@/lib/sla";
+import { evaluateWorkflowActions } from "@/lib/workflow";
 import {
   Area,
   AreaChart,
@@ -72,12 +74,27 @@ type Lead = {
   tasks?: Task[];
   calls?: Call[];
   activities?: Activity[];
+  scoreMeta?: { score: number; reasons: string[]; breakdown: { factor: string; delta: number; note: string }[]; classification: string };
   ai?: AIAnalysis;
 };
 type Task = { id: string; title: string; description?: string; type: string; status: string; priority: string; dueDate: string; leadId?: string; lead?: Lead; assignedTo?: string; assignedUser?: User };
 type Call = { id: string; type?: string; direction: string; status?: string; outcome?: string; duration?: number; content?: string; notes?: string; transcript?: string; createdAt: string; agent?: User; lead?: Lead };
 type Activity = { id: string; activityType: string; description: string; createdAt: string; user?: User; metadata?: { status?: string } | null };
-type AIAnalysis = { mock: boolean; summary: string; intent: string; sentiment: string; requirement: string; objections: string; buyingTimeline: string; recommendedNextAction: string };
+type AIAnalysis = {
+  mock: boolean;
+  summary: string;
+  intent: string;
+  customerIntent?: string;
+  keyRequirements?: string;
+  sentiment: string;
+  requirement: string;
+  objections: string;
+  buyingTimeline: string;
+  recommendedNextAction: string;
+  nextBestAction?: string;
+  confidence?: number;
+  scoreSummary?: string;
+};
 
 const nav = [
   ["Dashboard", LayoutDashboard],
@@ -130,6 +147,33 @@ const emptyCampaign = {
   budget: ""
 };
 
+const defaultLeadFilters = { q: "", status: "ALL", source: "ALL", priority: "ALL", assignedTo: "ALL" };
+
+type LeadFilterState = typeof defaultLeadFilters;
+type SavedLeadView = { id: string; name: string; filters: LeadFilterState; isDefault?: boolean };
+
+export function matchesLeadFilters(lead: Lead, filters: LeadFilterState) {
+  const textQuery = filters.q.trim().toLowerCase();
+  const matchesQuery =
+    !textQuery ||
+    `${lead.firstName} ${lead.lastName} ${lead.company} ${lead.email} ${lead.phone}`.toLowerCase().includes(textQuery) ||
+    lead.source.toLowerCase().includes(textQuery);
+
+  const matchesStatus = filters.status === "ALL" || lead.status === filters.status;
+  const matchesSource = filters.source === "ALL" || lead.source === filters.source;
+  const matchesPriority = filters.priority === "ALL" || lead.priority === filters.priority;
+  const matchesAssigned = filters.assignedTo === "ALL" || (filters.assignedTo === "UNASSIGNED" ? !lead.assignedTo : lead.assignedTo === filters.assignedTo);
+
+  return matchesQuery && matchesStatus && matchesSource && matchesPriority && matchesAssigned;
+}
+
+const defaultSavedViews: SavedLeadView[] = [
+  { id: "all", name: "All Leads", filters: defaultLeadFilters, isDefault: true },
+  { id: "hot", name: "Hot Pipeline", filters: { ...defaultLeadFilters, priority: "HOT" }, isDefault: true },
+  { id: "follow-up", name: "Follow Up", filters: { ...defaultLeadFilters, status: "FOLLOW_UP" }, isDefault: true },
+  { id: "unassigned", name: "Unassigned", filters: { ...defaultLeadFilters, assignedTo: "UNASSIGNED" }, isDefault: true }
+];
+
 export function CRMApp() {
   const [active, setActive] = useState("Dashboard");
   const [user, setUser] = useState<User | null>(null);
@@ -142,7 +186,9 @@ export function CRMApp() {
   const [dashboard, setDashboard] = useState<any>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [globalSearch, setGlobalSearch] = useState("");
-  const [filters, setFilters] = useState({ q: "", status: "ALL", source: "ALL", priority: "ALL", assignedTo: "ALL" });
+  const [filters, setFilters] = useState<LeadFilterState>(defaultLeadFilters);
+  const [savedViews, setSavedViews] = useState<SavedLeadView[]>(defaultSavedViews);
+  const [selectedViewId, setSelectedViewId] = useState<string>("all");
   const [leadsPage, setLeadsPage] = useState(1);
   const [leadsPagination, setLeadsPagination] = useState({ page: 1, pageSize: 25, total: 0, totalPages: 1 });
   const [showLeadForm, setShowLeadForm] = useState(false);
@@ -156,7 +202,29 @@ export function CRMApp() {
   const [busy, setBusy] = useState(false);
   const agents = users.filter((item) => item.role === "SALES");
 
-  async function loadAll() {
+  const applyView = useCallback((view: SavedLeadView) => {
+    setSelectedViewId(view.id);
+    setFilters(view.filters);
+  }, []);
+
+  const saveCurrentView = useCallback(() => {
+    const name = window.prompt("Name this saved view", `View ${savedViews.length + 1}`);
+    if (!name) return;
+
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    const nextView: SavedLeadView = {
+      id: `custom-${Date.now()}`,
+      name: trimmed,
+      filters: { ...filters }
+    };
+
+    setSavedViews((previous) => [nextView, ...previous]);
+    setSelectedViewId(nextView.id);
+  }, [filters, savedViews.length]);
+
+  const loadAll = useCallback(async () => {
     const [boot, leadRes, taskRes, callRes, dashRes, campaignRes] = await Promise.all([
       fetch("/api/bootstrap"),
       fetch(`/api/leads?${new URLSearchParams({ ...filters, page: String(leadsPage), pageSize: String(leadsPagination.pageSize) })}`),
@@ -180,11 +248,11 @@ export function CRMApp() {
     setTasks((await taskRes.json()).tasks);
     setCalls((await callRes.json()).calls);
     setDashboard(await dashRes.json());
-  }
+  }, [filters, leadsPage, leadsPagination.pageSize]);
 
   useEffect(() => {
     loadAll();
-  }, [filters.status, filters.source, filters.priority, filters.assignedTo, leadsPage]);
+  }, [loadAll]);
 
   useEffect(() => {
     const timer = setTimeout(() => setFilters((prev) => ({ ...prev, q: globalSearch })), 250);
@@ -193,20 +261,20 @@ export function CRMApp() {
 
   useEffect(() => {
     loadAll();
-  }, [filters.q]);
+  }, [filters.q, loadAll]);
 
   useEffect(() => {
     setLeadsPage(1);
   }, [filters.status, filters.source, filters.priority, filters.assignedTo, filters.q]);
 
-  async function openLead(id: string) {
+  const openLead = useCallback(async (id: string) => {
     const response = await fetch(`/api/leads/${id}`);
     const json = await response.json();
     setSelectedLead(json.lead);
     setTaskForm((prev) => ({ ...prev, leadId: id, assignedTo: json.lead?.assignedTo ?? user?.id ?? "" }));
-  }
+  }, [user?.id]);
 
-  async function createLead(event: React.FormEvent) {
+  const createLead = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setLeadFormError("");
@@ -222,9 +290,9 @@ export function CRMApp() {
     } else {
       setLeadFormError(json.error ?? "Could not create lead.");
     }
-  }
+  }, [leadForm, loadAll, openLead]);
 
-  async function createCampaign(event: React.FormEvent) {
+  const createCampaign = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     setCampaignBusy(true);
     const response = await fetch("/api/campaigns", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campaignForm) });
@@ -236,33 +304,33 @@ export function CRMApp() {
       setCampaignForm(emptyCampaign);
       setActive("Campaigns");
     }
-  }
+  }, [campaignForm]);
 
-  async function updateLead(id: string, patch: Partial<Lead>) {
+  const updateLead = useCallback(async (id: string, patch: Partial<Lead>) => {
     const response = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     const json = await response.json();
     if (response.ok) {
       setSelectedLead(json.lead);
       await loadAll();
     }
-  }
+  }, [loadAll]);
 
-  async function createTask(event: React.FormEvent) {
+  const createTask = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     const payload = { ...taskForm, assignedTo: taskForm.assignedTo || user?.id, leadId: taskForm.leadId || selectedLead?.id };
     await fetch("/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     setTaskForm({ title: "", description: "", type: "FOLLOW_UP", priority: "WARM", dueDate: "", assignedTo: "", leadId: selectedLead?.id ?? "" });
     await loadAll();
     if (selectedLead) await openLead(selectedLead.id);
-  }
+  }, [loadAll, openLead, selectedLead, taskForm, user?.id]);
 
-  async function completeTask(id: string) {
+  const completeTask = useCallback(async (id: string) => {
     await fetch(`/api/tasks/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "COMPLETED" }) });
     await loadAll();
     if (selectedLead) await openLead(selectedLead.id);
-  }
+  }, [loadAll, openLead, selectedLead]);
 
-  async function logCall(event: React.FormEvent) {
+  const logCall = useCallback(async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedLead || !user) return;
     const response = await fetch("/api/calls", {
@@ -274,23 +342,23 @@ export function CRMApp() {
     setCallForm({ type: "CALL", direction: "OUTBOUND", status: "CONNECTED", outcome: "Interested", duration: 6, content: "", notes: "", transcript: "" });
     await loadAll();
     await openLead(selectedLead.id);
-  }
+  }, [callForm, loadAll, openLead, selectedLead, user]);
 
-  async function analyze() {
+  const analyze = useCallback(async () => {
     if (!selectedLead) return;
     const response = await fetch("/api/ai/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ leadId: selectedLead.id }) });
     const json = await response.json();
     setSelectedLead((lead) => (lead ? { ...lead, ai: json.analysis } : lead));
     await openLead(selectedLead.id);
-  }
+  }, [openLead, selectedLead]);
 
-  async function logout() {
+  const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     location.href = "/login";
-  }
+  }, []);
 
   const content = useMemo(() => {
-    if (active === "Dashboard") return <Dashboard dashboard={dashboard} openLead={openLead} setActive={setActive} user={user} />;
+    if (active === "Dashboard") return <Dashboard dashboard={dashboard} leads={leads} openLead={openLead} setActive={setActive} user={user} />;
     if (active === "Leads")
       return (
         <LeadsView
@@ -304,6 +372,10 @@ export function CRMApp() {
           pagination={leadsPagination}
           page={leadsPage}
           setPage={setLeadsPage}
+          savedViews={savedViews}
+          selectedViewId={selectedViewId}
+          onApplyView={applyView}
+          onSaveView={saveCurrentView}
         />
       );
     if (active === "Tasks") return <TasksView tasks={tasks} completeTask={completeTask} setTaskForm={setTaskForm} taskForm={taskForm} users={users} leads={leads} createTask={createTask} />;
@@ -311,7 +383,7 @@ export function CRMApp() {
     if (active === "Campaigns") return <CampaignsView campaigns={campaigns} setShowCampaignForm={setShowCampaignForm} />;
     if (active === "Analytics") return <AnalyticsView dashboard={dashboard} tasks={tasks} />;
     return <SettingsView user={user} users={users} />;
-  }, [active, dashboard, leads, filters, users, tasks, calls, campaigns, taskForm, user, leadsPagination, leadsPage]);
+  }, [active, applyView, calls, campaigns, completeTask, createTask, dashboard, filters, leads, leadsPage, leadsPagination, openLead, saveCurrentView, savedViews, selectedViewId, taskForm, tasks, updateLead, user, users]);
 
   const sidebarItems: SidebarItem[] = useMemo(() => {
     const tabs: SidebarItem[] = nav.map(([item, Icon]) => ({ kind: "tab", label: item, icon: Icon, active: active === item, onClick: () => setActive(item) }));
@@ -418,7 +490,22 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
   return <section className={`rounded-2xl border border-line/70 bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover ${className}`}>{children}</section>;
 }
 
-function Dashboard({ dashboard, openLead, setActive, user }: any) {
+function Dashboard({ dashboard, leads, openLead, setActive, user }: any) {
+  const slaSummary = useMemo(() => {
+    const summary = { ok: 0, warning: 0, escalated: 0 };
+    for (const lead of leads) {
+      const state = getLeadSlaState({
+        priority: lead.priority as "HOT" | "WARM" | "COLD",
+        status: lead.status,
+        nextFollowUpAt: lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt) : null
+      });
+      if (state.status === "OK") summary.ok += 1;
+      else if (state.status === "WARNING") summary.warning += 1;
+      else summary.escalated += 1;
+    }
+    return summary;
+  }, [leads]);
+  const workflowActions = useMemo(() => leads.flatMap((lead) => evaluateWorkflowActions(lead)).slice(0, 4), [leads]);
   if (!dashboard) return <LoadingGrid />;
   const kpis = [
     ["Total Leads", dashboard.kpis.total, Users, "brand"],
@@ -458,6 +545,28 @@ function Dashboard({ dashboard, openLead, setActive, user }: any) {
           <button onClick={() => setActive("Tasks")} className="mt-4 text-sm font-semibold text-brand-700 transition-colors hover:text-brand-600 dark:text-brand-400">View all tasks →</button>
         </Card>
       </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <h3 className="font-semibold text-ink">SLA overview</h3>
+          <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+            <div className="rounded-xl border border-line bg-panel p-3"><div className="text-xs uppercase tracking-wide text-slate-500">OK</div><div className="mt-2 text-2xl font-semibold text-ink">{slaSummary.ok}</div></div>
+            <div className="rounded-xl border border-line bg-panel p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Warning</div><div className="mt-2 text-2xl font-semibold text-amber-600">{slaSummary.warning}</div></div>
+            <div className="rounded-xl border border-line bg-panel p-3"><div className="text-xs uppercase tracking-wide text-slate-500">Escalated</div><div className="mt-2 text-2xl font-semibold text-red-600">{slaSummary.escalated}</div></div>
+          </div>
+        </Card>
+        <Card>
+          <h3 className="font-semibold text-ink">Automation queue</h3>
+          <div className="mt-3 space-y-2">
+            {workflowActions.map((action) => (
+              <div key={`${action.leadId ?? "lead"}-${action.id}`} className="rounded-xl border border-line bg-panel p-3">
+                <div className="text-sm font-semibold">{action.name}</div>
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{action.description}</div>
+                <div className="mt-2 text-xs font-medium text-brand-700 dark:text-brand-300">{action.message}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
       <div className="grid gap-4 xl:grid-cols-3">
         <ChartCard title="Leads by Source"><PieGraph data={dashboard.bySource} /></ChartCard>
         <ChartCard title="Conversion Funnel"><FunnelGraph data={dashboard.funnel} /></ChartCard>
@@ -485,17 +594,44 @@ function Dashboard({ dashboard, openLead, setActive, user }: any) {
   );
 }
 
-function LeadsView({ leads, filters, setFilters, users, openLead, setShowLeadForm, updateLead, pagination, page, setPage }: any) {
+function LeadsView({ leads, filters, setFilters, users, openLead, setShowLeadForm, updateLead, pagination, page, setPage, savedViews, selectedViewId, onApplyView, onSaveView }: any) {
+  const visibleLeads = useMemo(() => leads.filter((lead: Lead) => matchesLeadFilters(lead, filters)), [filters, leads]);
+
   return (
     <div className="space-y-4">
-      <Title title="Leads" subtitle="Search, filter, assign, update status, and open Lead 360." action={<button onClick={() => setShowLeadForm(true)} className="rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98]">Create Lead</button>} />
+      <Title
+        title="Leads"
+        subtitle="Search, filter, assign, update status, and open Lead 360."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={onSaveView} className="rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-semibold text-ink transition-colors hover:bg-panel">Save view</button>
+            <button onClick={() => setShowLeadForm(true)} className="rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98]">Create Lead</button>
+          </div>
+        }
+      />
+
       <Card>
-        <div className="grid gap-3 md:grid-cols-5">
-          <Filter label="Status" value={filters.status} onChange={(v) => setFilters({ ...filters, status: v })} options={["ALL", ...statuses]} />
-          <Filter label="Source" value={filters.source} onChange={(v) => setFilters({ ...filters, source: v })} options={["ALL", ...sources]} />
-          <Filter label="Priority" value={filters.priority} onChange={(v) => setFilters({ ...filters, priority: v })} options={["ALL", ...priorities]} />
-          <Filter label="Agent" value={filters.assignedTo} onChange={(v) => setFilters({ ...filters, assignedTo: v })} options={["ALL", ...users.map((u: User) => u.id)]} render={(v) => users.find((u: User) => u.id === v)?.name ?? v} />
-          <div><label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Score</label><div className="mt-2 rounded-lg border border-line px-3 py-2 text-sm text-slate-500 dark:text-slate-400">Sort by score in table</div></div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {savedViews.map((view: SavedLeadView) => (
+              <button
+                key={view.id}
+                type="button"
+                onClick={() => onApplyView(view)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-all ${selectedViewId === view.id ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-500/10 dark:text-brand-300" : "border-line bg-surface text-slate-600 hover:bg-panel dark:text-slate-300"}`}
+              >
+                {view.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-5">
+            <Filter label="Status" value={filters.status} onChange={(v) => setFilters({ ...filters, status: v })} options={["ALL", ...statuses]} />
+            <Filter label="Source" value={filters.source} onChange={(v) => setFilters({ ...filters, source: v })} options={["ALL", ...sources]} />
+            <Filter label="Priority" value={filters.priority} onChange={(v) => setFilters({ ...filters, priority: v })} options={["ALL", ...priorities]} />
+            <Filter label="Agent" value={filters.assignedTo} onChange={(v) => setFilters({ ...filters, assignedTo: v })} options={["ALL", "UNASSIGNED", ...users.map((u: User) => u.id)]} render={(v) => (v === "UNASSIGNED" ? "Unassigned" : users.find((u: User) => u.id === v)?.name ?? v)} />
+            <div><label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Saved view</label><div className="mt-2 rounded-lg border border-line px-3 py-2 text-sm text-slate-500 dark:text-slate-400">{savedViews.find((view: SavedLeadView) => view.id === selectedViewId)?.name ?? "Custom"}</div></div>
+          </div>
         </div>
       </Card>
       <div className="overflow-hidden rounded-2xl border border-line/70 bg-surface shadow-card">
@@ -505,7 +641,7 @@ function LeadsView({ leads, filters, setFilters, users, openLead, setShowLeadFor
               <tr>{["Lead Name", "Company", "Phone", "Email", "Source", "Status", "Priority", "Score", "Assigned Agent", "Next Follow-up", "Created", "Actions"].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {leads.map((lead: Lead) => (
+              {visibleLeads.map((lead: Lead) => (
                 <tr key={lead.id} className="transition-colors hover:bg-panel/70">
                   <td className="px-4 py-3 font-semibold text-ink">{lead.firstName} {lead.lastName}</td>
                   <td className="px-4 py-3">{lead.company}</td>
@@ -533,8 +669,8 @@ function LeadsView({ leads, filters, setFilters, users, openLead, setShowLeadFor
             </tbody>
           </table>
         </div>
-        {!leads.length ? <Empty label="No leads match these filters." /> : null}
-        {leads.length ? (
+        {!visibleLeads.length ? <Empty label="No leads match these filters." /> : null}
+        {visibleLeads.length ? (
           <div className="flex items-center justify-between border-t border-line px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
             <span>
               Page {pagination.page} of {pagination.totalPages} · {pagination.total} lead{pagination.total === 1 ? "" : "s"}
@@ -584,12 +720,49 @@ function LeadDrawer({ lead, users, updateLead, onClose, taskForm, setTaskForm, c
         <div className="grid gap-4 p-5 xl:grid-cols-[1fr_360px]">
           <div className="space-y-4">
             <Card><h3 className="font-semibold">Contact Information</h3><div className="mt-3 grid gap-3 sm:grid-cols-2">{[["Email", lead.email], ["Phone", lead.phone], ["Company", lead.company], ["Designation", lead.designation], ["Location", lead.city], ["Source", lead.source]].map(([k, v]) => <Info key={k} label={k} value={v || "Not set"} />)}</div></Card>
-            <Card><h3 className="font-semibold">AI Summary <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(mock)</span></h3><p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{ai?.summary}</p><div className="mt-4 grid gap-2 sm:grid-cols-2">{["intent", "sentiment", "requirement", "objections", "buyingTimeline", "recommendedNextAction"].map((key) => <Info key={key} label={titleCase(key)} value={ai?.[key] ?? "Run analysis"} />)}</div></Card>
+            <Card>
+              <h3 className="font-semibold">AI Summary <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(live insight)</span></h3>
+              <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{ai?.summary}</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <Info label="Customer intent" value={ai?.customerIntent ?? ai?.intent ?? "Run analysis"} />
+                <Info label="Sentiment" value={ai?.sentiment ?? "Available after analysis"} />
+                <Info label="Key requirement" value={ai?.keyRequirements ?? ai?.requirement ?? "Not captured"} />
+                <Info label="Objection" value={ai?.objections ?? "None captured"} />
+                <Info label="Buying timeline" value={ai?.buyingTimeline ?? "Needs review"} />
+                <Info label="Next best action" value={ai?.nextBestAction ?? ai?.recommendedNextAction ?? "Review lead"} />
+              </div>
+            </Card>
             <Card><h3 className="font-semibold">Timeline</h3><div className="mt-3 space-y-3">{lead.activities?.map((activity: Activity) => { const tone = activityConversationTone(activity); const borderClass = tone === "green" ? "border-emerald-400 dark:border-emerald-600" : tone === "red" ? "border-red-400 dark:border-red-600" : "border-brand-100"; return <div key={activity.id} className={`border-l-2 ${borderClass} pl-3`}><div className="text-sm font-semibold">{titleCase(activity.activityType)}</div><div className="text-sm text-slate-600 dark:text-slate-300">{activity.description}</div><div className="text-xs text-slate-400 dark:text-slate-500">{dateLabel(activity.createdAt)} · {activity.user?.name ?? "System"}</div></div>; })}</div></Card>
             <Card><h3 className="font-semibold">Means of Conversation</h3><div className="mt-3 space-y-2">{lead.calls?.map((call: Call) => { const tone = conversationTone(call); const toneClass = conversationCardClass(tone); if (call.type === "MESSAGE") return <div key={call.id} className={`rounded-xl border p-3 transition-colors ${toneClass}`}><div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 font-semibold"><MessageSquare size={14} /> Message · {call.direction === "INBOUND" ? "Received" : "Sent"}</span><Badge tone={tone}>Logged</Badge></div><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{call.content || "No content"}</p><p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{dateLabel(call.createdAt)} · {call.agent?.name}</p></div>; if (call.type === "EMAIL") return <div key={call.id} className={`rounded-xl border p-3 transition-colors ${toneClass}`}><div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 font-semibold"><Mail size={14} /> Email · {call.direction === "INBOUND" ? "Received" : "Sent"}{call.outcome ? ` · ${call.outcome}` : ""}</span><Badge tone={tone}>Logged</Badge></div><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{call.content || "No content"}</p><p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{dateLabel(call.createdAt)} · {call.agent?.name}</p></div>; return <div key={call.id} className={`rounded-xl border p-3 transition-colors ${toneClass}`}><div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 font-semibold"><Phone size={14} /> {call.outcome}</span><div className="flex items-center gap-2"><Badge tone={tone}>{call.status ? titleCase(call.status) : "Logged"}</Badge><span className="text-sm text-slate-500 dark:text-slate-400">{call.duration} min</span></div></div><p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{call.notes || "No notes"}</p><p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{dateLabel(call.createdAt)} · {call.agent?.name}</p></div>; })}</div></Card>
           </div>
           <div className="space-y-4">
-            <Card><h3 className="font-semibold">Lead Score</h3><div className="mt-3 text-4xl font-semibold text-ink">{lead.score}/100</div><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{lead.score >= 75 ? "Hot Lead" : lead.score >= 45 ? "Warm Lead" : "Cold Lead"}</p><ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300"><li>Requested callback +20</li><li>Confirmed requirement +15</li><li>Responded to follow-up +8</li><li>Good contact details +5</li></ul></Card>
+            <Card>
+              <h3 className="font-semibold">Lead Score</h3>
+              <div className="mt-3 text-4xl font-semibold text-ink">{lead.score}/100</div>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{lead.scoreMeta?.classification ?? (lead.score >= 75 ? "Hot Lead" : lead.score >= 45 ? "Warm Lead" : "Cold Lead")}</p>
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400"><span>Positive factors</span><span>{lead.scoreMeta?.breakdown.filter((item) => item.delta > 0).reduce((sum, item) => sum + item.delta, 0) ?? lead.score}</span></div>
+                {lead.scoreMeta?.breakdown.filter((item) => item.delta > 0).slice(0, 4).map((item) => (
+                  <div key={`${item.factor}-${item.delta}`} className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    <div className="flex items-center justify-between gap-2"><span className="font-semibold">{item.factor}</span><span>+{item.delta}</span></div>
+                    <p className="mt-1 text-[11px] opacity-90">{item.note}</p>
+                  </div>
+                )) ?? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-500/10 dark:text-emerald-300">Requested callback +20</div>
+                )}
+              </div>
+              {lead.scoreMeta?.breakdown.some((item) => item.delta < 0) ? (
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Negative factors</div>
+                  {lead.scoreMeta.breakdown.filter((item) => item.delta < 0).map((item) => (
+                    <div key={`${item.factor}-${item.delta}`} className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-500/10 dark:text-red-300">
+                      <div className="flex items-center justify-between gap-2"><span className="font-semibold">{item.factor}</span><span>{item.delta}</span></div>
+                      <p className="mt-1 text-[11px] opacity-90">{item.note}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </Card>
             <Card>
               <h3 className="font-semibold">Log Conversation</h3>
               <form onSubmit={logCall} className="mt-3 space-y-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import type React from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { titleCase } from "@/lib/format";
 
 export const fieldClass =
@@ -77,30 +77,129 @@ export function Textarea({ label, value, onChange }: { label: string; value: str
   );
 }
 
+export type SelectOption = string | { value: string; label: string; disabled?: boolean };
+
 export function Select({
   label,
   value,
   onChange,
   options,
-  render
+  render,
+  loading = false,
+  placeholder = "Select an option",
+  emptyLabel = "No options available"
 }: {
   label: string;
   value: string | null | undefined;
   onChange: (value: string) => void;
-  options: string[];
+  options: SelectOption[];
   render?: (option: string) => string;
+  loading?: boolean;
+  placeholder?: string;
+  emptyLabel?: string;
 }) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const normalizedOptions = useMemo(
+    () =>
+      options.map((option) => {
+        if (typeof option === "string") {
+          return { value: option, label: render ? render(option) : titleCase(option), disabled: false };
+        }
+
+        return {
+          value: option.value,
+          label: option.label,
+          disabled: !!option.disabled
+        };
+      }),
+    [options, render]
+  );
+
+  const hasOptions = normalizedOptions.length > 0;
+  const selectedOption = normalizedOptions.find((option) => option.value === (value ?? "")) ?? null;
+
+  const filteredOptions = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return normalizedOptions;
+    return normalizedOptions.filter((option) => option.label.toLowerCase().includes(query));
+  }, [normalizedOptions, search]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const displayText = loading
+    ? "Loading options..."
+    : selectedOption
+      ? selectedOption.label
+      : placeholder;
+
   return (
-    <label className="block">
-      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
-      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`h-10 ${fieldClass}`}>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {render ? render(option) : titleCase(option)}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="block" ref={wrapperRef}>
+      <span className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">{label}</span>
+      <div className="relative mt-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (loading || !hasOptions) return;
+            setOpen((current) => !current);
+          }}
+          disabled={loading || !hasOptions}
+          className={`flex h-10 w-full items-center justify-between rounded-lg border border-line bg-surface px-3 text-left text-sm transition-all duration-150 ${fieldClass} ${loading || !hasOptions ? "cursor-not-allowed opacity-75" : "hover:border-brand-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"}`}
+        >
+          <span className={selectedOption ? "text-ink" : "text-slate-500 dark:text-slate-400"}>{displayText}</span>
+          <span className="text-slate-500 dark:text-slate-400">{open ? "▴" : "▾"}</span>
+        </button>
+
+        {open && !loading && hasOptions ? (
+          <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-line bg-white shadow-soft dark:bg-slate-900">
+            <div className="border-b border-line bg-slate-50/80 p-2 dark:bg-slate-950/60">
+              <input
+                autoFocus
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search options..."
+                className="h-9 w-full rounded-lg border border-line bg-white px-2.5 text-sm text-ink outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 dark:bg-slate-900"
+              />
+            </div>
+
+            <div className="max-h-56 overflow-y-auto">
+              {filteredOptions.length ? (
+                filteredOptions.map((option) => (
+                  <button
+                    key={option.value || `${label}-${option.label}`}
+                    type="button"
+                    disabled={option.disabled}
+                    onClick={() => {
+                      if (option.disabled) return;
+                      onChange(option.value);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                    className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors ${option.value === (value ?? "") ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300" : "text-ink hover:bg-slate-50 dark:hover:bg-slate-800/80"}`}
+                  >
+                    <span>{option.label}</span>
+                    {option.value === (value ?? "") ? <span className="h-2 w-2 rounded-full bg-brand-600" /> : null}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">{emptyLabel}</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

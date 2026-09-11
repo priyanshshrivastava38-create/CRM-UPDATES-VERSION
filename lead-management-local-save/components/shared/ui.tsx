@@ -1,0 +1,162 @@
+"use client";
+
+import type React from "react";
+import { titleCase } from "@/lib/format";
+
+export const fieldClass =
+  "mt-2 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink outline-none transition-shadow duration-150 placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15";
+
+export const primaryBtnClass =
+  "rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 px-3.5 py-2 text-sm font-semibold text-white shadow-glow transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-60 disabled:hover:brightness-100";
+
+export const secondaryBtnClass = "rounded-xl border border-line px-3.5 py-2 text-sm font-semibold text-ink transition-colors duration-150 hover:bg-panel";
+
+export function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <section className={`rounded-2xl border border-line/70 bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-card-hover ${className}`}>{children}</section>;
+}
+
+export function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: string }) {
+  const tones: Record<string, string> = {
+    green: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-800",
+    amber: "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-800",
+    red: "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-800",
+    blue: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-800",
+    slate: "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600"
+  };
+  return <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${tones[tone]}`}>{children}</span>;
+}
+
+export function Title({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">{title}</h1>
+        {subtitle ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export function Input({
+  label,
+  value,
+  onChange,
+  type = "text",
+  required = false,
+  placeholder
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  onChange: (value: string) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+      <input
+        required={required}
+        type={type}
+        value={value ?? ""}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-10 ${fieldClass}`}
+      />
+    </label>
+  );
+}
+
+export function Textarea({ label, value, onChange }: { label: string; value: string | null | undefined; onChange: (value: string) => void }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+      <textarea value={value ?? ""} onChange={(e) => onChange(e.target.value)} rows={3} className={`py-2 ${fieldClass}`} />
+    </label>
+  );
+}
+
+export function Select({
+  label,
+  value,
+  onChange,
+  options,
+  render
+}: {
+  label: string;
+  value: string | null | undefined;
+  onChange: (value: string) => void;
+  options: string[];
+  render?: (option: string) => string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</span>
+      <select value={value ?? ""} onChange={(e) => onChange(e.target.value)} className={`h-10 ${fieldClass}`}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {render ? render(option) : titleCase(option)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export const Filter = Select;
+
+export function Info({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="mt-1 text-sm text-ink">{value}</div>
+    </div>
+  );
+}
+
+export function Empty({ label }: { label: string }) {
+  return <div className="p-10 text-center text-sm text-slate-500 dark:text-slate-400">{label}</div>;
+}
+
+export function LoadingGrid() {
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      {[1, 2, 3, 4, 5, 6].map((n) => (
+        <div key={n} className="h-28 animate-pulse overflow-hidden rounded-2xl border border-line/70 bg-surface bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent)] bg-[length:400px_100%]" />
+      ))}
+    </div>
+  );
+}
+
+export function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4">
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-line bg-surface p-6 shadow-soft ${wide ? "max-w-3xl" : "max-w-lg"}`}>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+          <button onClick={onClose} className="text-sm text-slate-500 transition-colors hover:text-ink dark:text-slate-400">
+            Close
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-30 flex justify-end bg-black/40">
+      <div className="h-full w-full max-w-xl overflow-y-auto border-l border-line bg-surface p-6 shadow-soft">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-ink">{title}</h2>
+          <button onClick={onClose} className="text-sm text-slate-500 transition-colors hover:text-ink dark:text-slate-400">
+            Close
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}

@@ -18,6 +18,7 @@ export function Sidebar({ items, subtitle = "Lead Management System" }: { items:
       <nav className="space-y-1">
         {items.map((item) => {
           const Icon = item.icon;
+          const itemKey = item.kind === "link" ? `link:${item.href}:${item.label}` : `tab:${item.label}`;
           const className = `flex h-10 w-full items-center gap-3 rounded-xl px-3 text-sm transition-all duration-150 ${
             item.active
               ? "bg-gradient-to-r from-brand-600 to-brand-500 font-semibold text-white shadow-glow"
@@ -25,13 +26,13 @@ export function Sidebar({ items, subtitle = "Lead Management System" }: { items:
           }`;
           if (item.kind === "link") {
             return (
-              <Link key={item.label} href={item.href} className={className}>
+              <Link key={itemKey} href={item.href} className={className}>
                 <Icon size={17} /> {item.label}
               </Link>
             );
           }
           return (
-            <button key={item.label} onClick={item.onClick} className={className}>
+            <button key={itemKey} onClick={item.onClick} className={className}>
               <Icon size={17} /> {item.label}
             </button>
           );

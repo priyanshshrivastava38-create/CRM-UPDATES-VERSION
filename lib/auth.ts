@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+export { DEMO_PASSWORD } from "@/lib/demo-accounts";
 
-export const DEMO_PASSWORD = "Vih@12345";
 export const SESSION_COOKIE = "vih_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 12;
 
