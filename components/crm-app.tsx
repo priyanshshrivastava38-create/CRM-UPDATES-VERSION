@@ -497,7 +497,6 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 }
 
 function Dashboard({ dashboard, leads, openLead, setActive, user, loading }: any) {
-  if (loading && !dashboard) return <LoadingGrid />;
   const slaSummary = useMemo(() => {
     const summary = { ok: 0, warning: 0, escalated: 0 };
     for (const lead of leads) {
@@ -512,8 +511,10 @@ function Dashboard({ dashboard, leads, openLead, setActive, user, loading }: any
     }
     return summary;
   }, [leads]);
+
   const workflowActions = useMemo(() => leads.flatMap((lead) => evaluateWorkflowActions(lead)).slice(0, 4), [leads]);
-  if (!dashboard) return <LoadingGrid />;
+
+  if (!dashboard || (loading && !dashboard)) return <LoadingGrid />;
 
   const kpis = [
     ["Total Leads", dashboard.kpis.total, Users, "brand"],

@@ -9,6 +9,10 @@ export { DEMO_PASSWORD } from "@/lib/demo-accounts";
 export const SESSION_COOKIE = "vih_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 12;
 
+export function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 function sessionSecret() {
   const secret = process.env.SESSION_SECRET;
   if (secret) return secret;
@@ -72,9 +76,10 @@ export async function verifyPassword(password: string, hash: string) {
 export async function ensureDemoAccounts() {
   await Promise.all(
     DEMO_ACCOUNTS.map(async (account) => {
+      const normalizedEmail = normalizeEmail(account.email);
       const passwordHash = await hashPassword(account.password);
       await prisma.user.upsert({
-        where: { email: account.email },
+        where: { email: normalizedEmail },
         update: {
           name: account.name,
           password: passwordHash,
@@ -83,7 +88,7 @@ export async function ensureDemoAccounts() {
         },
         create: {
           name: account.name,
-          email: account.email,
+          email: normalizedEmail,
           password: passwordHash,
           role: account.role,
           active: true

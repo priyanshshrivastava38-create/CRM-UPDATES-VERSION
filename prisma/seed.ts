@@ -34,6 +34,8 @@ function addDays(days: number) {
 }
 
 async function main() {
+  const demoEmails = DEMO_ACCOUNTS.map((account) => account.email.toLowerCase().trim());
+
   await prisma.payment.deleteMany();
   await prisma.invoiceLineItem.deleteMany();
   await prisma.invoice.deleteMany();
@@ -64,13 +66,14 @@ async function main() {
   await prisma.task.deleteMany();
   await prisma.lead.deleteMany();
   await prisma.campaign.deleteMany();
-  await prisma.user.deleteMany();
+  await prisma.user.deleteMany({ where: { email: { in: demoEmails } } });
 
   const demoUsers = await Promise.all(
     DEMO_ACCOUNTS.map(async (account) => {
+      const normalizedEmail = account.email.trim().toLowerCase();
       const passwordHash = await hashPassword(account.password);
       return prisma.user.upsert({
-        where: { email: account.email },
+        where: { email: normalizedEmail },
         update: {
           name: account.name,
           password: passwordHash,
@@ -79,7 +82,7 @@ async function main() {
         },
         create: {
           name: account.name,
-          email: account.email,
+          email: normalizedEmail,
           password: passwordHash,
           role: account.role,
           active: true
