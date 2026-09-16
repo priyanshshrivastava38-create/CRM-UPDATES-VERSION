@@ -23,7 +23,8 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (!response.ok) {
-      setError("Could not sign in with those demo credentials.");
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      setError(result?.error ?? `Sign-in failed (${response.status}). Check the database configuration.`);
       return;
     }
     router.push("/");

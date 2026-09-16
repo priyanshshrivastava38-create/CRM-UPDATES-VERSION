@@ -16,10 +16,13 @@ export async function POST(request: Request) {
   }
 
   const normalizedEmail = normalizeEmail(body.email);
+  const isDemoAccount = DEMO_ACCOUNTS.some((account) => account.email === normalizedEmail);
+  if (isDemoAccount) {
+    await ensureDemoAccounts();
+  }
   let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  const isDemoAccount = DEMO_ACCOUNTS.some((account) => account.email === normalizedEmail);
-  if (!user || (isDemoAccount && !user.active)) {
+  if (!user) {
     await ensureDemoAccounts();
     user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   }
