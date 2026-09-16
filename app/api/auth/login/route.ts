@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { createSessionToken, verifyPassword, SESSION_COOKIE, SESSION_TTL_SECONDS, DUMMY_PASSWORD_HASH, ensureDemoAccounts, normalizeEmail } from "@/lib/auth";
+import { DEMO_ACCOUNTS } from "@/lib/demo-accounts";
 
 export async function POST(request: Request) {
   let body: { email?: string; password?: string };
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
   const normalizedEmail = normalizeEmail(body.email);
   let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user) {
+  const isDemoAccount = DEMO_ACCOUNTS.some((account) => account.email === normalizedEmail);
+  if (!user || (isDemoAccount && !user.active)) {
     await ensureDemoAccounts();
     user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   }
