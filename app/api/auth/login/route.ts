@@ -49,6 +49,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[auth] sign-in database error", error);
-    return NextResponse.json({ error: "Sign-in service unavailable. Check DATABASE_URL and Prisma migrations." }, { status: 503 });
+    return NextResponse.json({ error: "Sign-in service unavailable. Check DATABASE_URL, SESSION_SECRET, and Prisma migrations." }, { status: 503 });
   }
 }
