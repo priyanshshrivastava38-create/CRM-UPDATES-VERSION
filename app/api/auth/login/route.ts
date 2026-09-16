@@ -16,34 +16,39 @@ export async function POST(request: Request) {
   }
 
   const normalizedEmail = normalizeEmail(body.email);
-  const isDemoAccount = DEMO_ACCOUNTS.some((account) => account.email === normalizedEmail);
-  if (isDemoAccount) {
-    await ensureDemoAccounts();
-  }
-  let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  try {
+    const isDemoAccount = DEMO_ACCOUNTS.some((account) => account.email === normalizedEmail);
+    if (isDemoAccount) {
+      await ensureDemoAccounts();
+    }
+    let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user) {
-    await ensureDemoAccounts();
-    user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-  }
+    if (!user) {
+      await ensureDemoAccounts();
+      user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    }
 
-  const passwordValid = await verifyPassword(body.password, user?.password ?? DUMMY_PASSWORD_HASH);
-  if (!user || !user.active || !passwordValid) {
-    console.warn("[auth] sign-in failed", {
-      email: normalizedEmail,
-      reason: !user ? "user-not-found" : !user.active ? "user-inactive" : "invalid-password"
+    const passwordValid = await verifyPassword(body.password, user?.password ?? DUMMY_PASSWORD_HASH);
+    if (!user || !user.active || !passwordValid) {
+      console.warn("[auth] sign-in failed", {
+        email: normalizedEmail,
+        reason: !user ? "user-not-found" : !user.active ? "user-inactive" : "invalid-password"
+      });
+      return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+    }
+
+    const cookieStore = await cookies();
+    cookieStore.set(SESSION_COOKIE, createSessionToken(user.id), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: SESSION_TTL_SECONDS
     });
-    return NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("[auth] sign-in database error", error);
+    return NextResponse.json({ error: "Sign-in service unavailable. Check DATABASE_URL and Prisma migrations." }, { status: 503 });
   }
-
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, createSessionToken(user.id), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_TTL_SECONDS
-  });
-
-  return NextResponse.json({ ok: true });
 }
